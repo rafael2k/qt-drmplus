@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include "drmplus_internal.h"
 
@@ -277,8 +278,16 @@ int drmplusResetSync(drmplusHandle hp, uint32_t flags)
     }
 
     if(flags == 0) {
-        memset(&p->mpx_desc, 0x00, sizeof(mpx_desc_t));
-        memset(p->services, 0x00, sizeof(srv_data_t)*4);
+        //can't clear fully mpx_desc due there is callbacks saved
+        memset(&p->mpx_desc.info, 0x00, sizeof(mpx_info_t));
+        p->mpx_desc.sdc_num=0;
+        memset(p->mpx_desc.audio_last_frame, 0x00, 4*sizeof(int16_t)*960*2*2); //aac_samples x num_channels x sbr_multiplicator
+        memset(p->mpx_desc.channels_flags, 0x00, 4*sizeof(int32_t));
+        memset(p->mpx_desc.aac_sample_rate, 0x00, 4*sizeof(int32_t));
+
+        memset(&p->services, 0x00, sizeof(mpx_info_t));
+
+        //memset(p->services, 0x00, sizeof(srv_data_t)*4);
     }
 
 }
@@ -535,7 +544,7 @@ int drmplusAddSamplesDouble(drmplusHandle hp, double *inputBuffer, unsigned int 
 	if(p->siginfo.spectrum_inverted > 0 && p->cfg.ifoEstimationType == IFO_EST_4SYMBOLS) {
 		fftw_complex tmp;
 		for (i=0;i<106;i++) {
-			tmp[0] = p->symbol[p->siginfo.dc_freq_coarse + 110+i][0];
+            tmp[0] = p->symbol[p->siginfo.dc_freq_coarse + 110+i][0];
 			tmp[1] = p->symbol[p->siginfo.dc_freq_coarse + 110+i][1];
 			p->symbol[p->siginfo.dc_freq_coarse + 110+i][1] = p->symbol[p->siginfo.dc_freq_coarse + 322-i][0];
 			p->symbol[p->siginfo.dc_freq_coarse + 110+i][0] = p->symbol[p->siginfo.dc_freq_coarse + 322-i][1];
@@ -688,6 +697,7 @@ int drmplusAddSamplesDouble(drmplusHandle hp, double *inputBuffer, unsigned int 
 							fprintf(stderr, "Trying spectrum inversion...\n");
 							p->siginfo.spectrum_inverted = !p->siginfo.spectrum_inverted;
 							p->siginfo.fac_errors=0;
+                            drmplusResetSync(p, 0);
 						}
 
 						goto away_10;
@@ -699,6 +709,7 @@ int drmplusAddSamplesDouble(drmplusHandle hp, double *inputBuffer, unsigned int 
 							p->siginfo.sync_state=SYNC_STATE_NULL; // FIXME: too hard reset?
 							p->frame_num = -1;
 							p->siginfo.fac_errors=0;
+                            drmplusResetSync(p, 0);
 							goto away_10;
 						}
 #else
